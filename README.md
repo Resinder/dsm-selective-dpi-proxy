@@ -52,7 +52,7 @@ DSM client ──HTTP proxy──▶ tinyproxy ──SOCKS5──▶ ByeDPI ─�
 | Destination restrictions | HTTPS `CONNECT` only to ports in `CONNECT_PORTS` (default `443`). Plain HTTP only to the default port 80. Literal loopback / RFC 1918 / link-local / CGNAT-Tailscale / IPv6 ULA and link-local targets and `.local`, `.internal`, `.lan`, `.home`, `.arpa`, `.ts.net` names are refused (`tinyproxy/filter.default`). |
 | Which traffic is altered | Only TLS ClientHellos whose SNI matches `SPLIT_HOSTS` (label-boundary suffix match). ByeDPI is started with `--hosts=:<list> --proto=tls --tlsrec=<pos> --auto=none`: the options apply to the listed hosts only, and the trailing empty group relays everything else unmodified. |
 | TLS integrity | The proxy never terminates TLS. Clients validate certificates end to end; nothing in this stack disables verification. |
-| Container hardening | Read-only root filesystems, `cap_drop: [ALL]`, `no-new-privileges`, non-root user `65534`, no privileged mode, memory/PID/CPU limits, `restart: unless-stopped`, rotated `json-file` logs. |
+| Container hardening | Read-only root filesystems, `cap_drop: [ALL]`, `no-new-privileges`, non-root user `65534`, no privileged mode, memory limits and a relative CPU weight, `restart: unless-stopped`, rotated `json-file` logs. |
 | Supply chain | Both images build `FROM alpine:3.20@sha256:d9e853e8…` (digest-pinned). Tinyproxy comes from Alpine's signed package repo. ByeDPI is compiled from source at upstream commit `7efde1b1…` (tag `v0.17.3`); the build aborts if the checked-out tree does not hash to that commit. `pull_policy: build` prevents Docker from pulling look-alike images from a registry. |
 | Secrets | None. No credentials, keys or machine-specific addresses are stored in the repository; per-host values live in Portainer stack variables. |
 
@@ -189,6 +189,7 @@ Without starting any download:
 | `Proxying refused on filtered url` | Destination matches `filter.default` or `EXTRA_DENY_PATTERNS`. |
 | Listed host still `CONN-FAIL` through the proxy | Try another `TLSREC_POS` (e.g. `3+s`), redeploy, re-test. The ISP may use a different technique for that host. |
 | A listed host returns a self-signed certificate (`TLS-FAIL`) | Its server cannot handle a split ClientHello. Remove it from `SPLIT_HOSTS`. |
+| `NanoCPUs can not be set ... CPU CFS scheduler` or a `PidsLimit` error | The kernel lacks CFS quota / the pids cgroup (Synology DSM 7, kernel 4.4). The stack therefore uses only `mem_limit` and `cpu_shares`; do not add `cpus:` or `pids_limit:`. |
 | Stack fails to deploy: subnet overlap | Change `EDGE_SUBNET` and `PROXY_ALLOW` together. |
 | Build fails at `git fetch` | The NAS cannot reach GitHub, or `BYEDPI_COMMIT` is wrong. |
 | tinyproxy stays `starting` | ByeDPI is unhealthy; check `docker logs <stack>-byedpi-1`. |
