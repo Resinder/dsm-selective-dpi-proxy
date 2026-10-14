@@ -190,6 +190,7 @@ Without starting any download:
 | Listed host still `CONN-FAIL` through the proxy | Try another `TLSREC_POS` (e.g. `3+s`), redeploy, re-test. The ISP may use a different technique for that host. |
 | A listed host returns a self-signed certificate (`TLS-FAIL`) | Its server cannot handle a split ClientHello. Remove it from `SPLIT_HOSTS`. |
 | `NanoCPUs can not be set ... CPU CFS scheduler` or a `PidsLimit` error | The kernel lacks CFS quota / the pids cgroup (Synology DSM 7, kernel 4.4). The stack therefore uses only `mem_limit` and `cpu_shares`; do not add `cpus:` or `pids_limit:`. |
+| tinyproxy restarts with `can't create directory '/run/tinyproxy'` or `not writable` | The tmpfs must be owned by uid 65534. Keep the `uid=65534,gid=65534` tmpfs options; Synology's Docker ignores `mode=`. |
 | Stack fails to deploy: subnet overlap | Change `EDGE_SUBNET` and `PROXY_ALLOW` together. |
 | Build fails at `git fetch` | The NAS cannot reach GitHub, or `BYEDPI_COMMIT` is wrong. |
 | tinyproxy stays `starting` | ByeDPI is unhealthy; check `docker logs <stack>-byedpi-1`. |

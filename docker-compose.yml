@@ -70,7 +70,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-Connect}
       EXTRA_DENY_PATTERNS: ${EXTRA_DENY_PATTERNS:-}
     tmpfs:
-      - /run:size=1m,mode=1777
+      # Owned by the runtime user via uid/gid: Synology's Docker ignores the
+      # tmpfs "mode" option and would leave it root-owned 0755.
+      - /run/tinyproxy:size=1m,uid=65534,gid=65534
     ports:
       # Loopback by default: only processes on the Docker host (DSM) can connect.
       - "${BIND_ADDRESS:-127.0.0.1}:${PROXY_PORT:-8888}:8888/tcp"

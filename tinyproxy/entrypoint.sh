@@ -26,7 +26,10 @@ case "$UPSTREAM_SOCKS" in
   *[!A-Za-z0-9.:_-]*|'') echo "invalid UPSTREAM_SOCKS: $UPSTREAM_SOCKS" >&2; exit 64 ;;
 esac
 
-mkdir -p "$CONF_DIR"
+if [ ! -w "$CONF_DIR" ]; then
+  echo "$CONF_DIR is not writable by uid $(id -u); mount it as tmpfs with uid/gid (see docker-compose.yml)" >&2
+  exit 70
+fi
 {
   echo "Port 8888"
   echo "Listen 0.0.0.0"
