@@ -1,0 +1,14 @@
+# Destinations the proxy refuses (POSIX extended regex, case-insensitive).
+# Tinyproxy matches these against the request URL (plain HTTP) or the
+# host:port of a CONNECT tunnel. They stop literal internal targets; a public
+# name that resolves to a private address is not caught here (see README,
+# "Security design").
+
+# Loopback, RFC 1918, link-local and CGNAT/Tailscale address literals
+^(https?://)?(localhost|127\.|0\.|10\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)
+# IPv6 literals (loopback, ULA, link-local)
+^(https?://)?\[(::1|f[cd][0-9a-f]{2}:|fe80:)
+# Internal-looking names
+\.(local|internal|lan|home|arpa|ts\.net)(:[0-9]+)?(/|$)
+# Plain HTTP to an explicit port (only the default port 80 is allowed)
+^http://[^/]+:[0-9]+

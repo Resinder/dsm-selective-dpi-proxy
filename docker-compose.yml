@@ -1,0 +1,100 @@
+# dsm-selective-dpi-proxy
+#
+# DSM (or another local client) -> tinyproxy (HTTP proxy, loopback-only port)
+#   -> byedpi (SOCKS5, internal network only) -> internet
+#
+# ByeDPI splits the TLS ClientHello record only for the hostnames in
+# SPLIT_HOSTS; every other connection passes through it unmodified.
+# All settings come from environment variables (Portainer stack variables or
+# a local .env file); see .env.example and README.md.
+
+name: dsm-selective-dpi-proxy
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  stop_grace_period: 10s
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "3"}
+
+services:
+  byedpi:
+    <<: *hardening
+    build:
+      context: ./byedpi
+      args:
+        BYEDPI_COMMIT: ${BYEDPI_COMMIT:-7efde1b1296eaaa187b70e951894dde17527489c}
+    image: dsm-selective-dpi-proxy/byedpi:${BYEDPI_COMMIT:-7efde1b1296eaaa187b70e951894dde17527489c}
+    pull_policy: build
+    # Group 1: only for SPLIT_HOSTS and only for TLS, split the ClientHello
+    # into two TLS records inside the SNI. "--auto=none" then opens group 2,
+    # which has no options: every other host is relayed unmodified.
+    command:
+      - "--ip=0.0.0.0"
+      - "--port=1080"
+      - "--no-udp"
+      - "--max-conn=${BYEDPI_MAX_CONN:-256}"
+      - "--hosts=:${SPLIT_HOSTS:?set SPLIT_HOSTS to the space-separated hostnames to split}"
+      - "--proto=tls"
+      - "--tlsrec=${TLSREC_POS:-1+s}"
+      - "--auto=none"
+    networks: [socks, egress]   # no "ports": the SOCKS port is never published
+    mem_limit: 64m
+    pids_limit: 64
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh", "1080"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  tinyproxy:
+    <<: *hardening
+    build:
+      context: ./tinyproxy
+    image: dsm-selective-dpi-proxy/tinyproxy:1.11.2-alpine3.20
+    pull_policy: build
+    depends_on:
+      byedpi: {condition: service_healthy}
+    environment:
+      PROXY_ALLOW: ${PROXY_ALLOW:-172.30.88.0/29}
+      UPSTREAM_SOCKS: byedpi:1080
+      CONNECT_PORTS: ${CONNECT_PORTS:-443}
+      MAX_CLIENTS: ${MAX_CLIENTS:-32}
+      TIMEOUT: ${PROXY_TIMEOUT:-120}
+      LOG_LEVEL: ${LOG_LEVEL:-Connect}
+      EXTRA_DENY_PATTERNS: ${EXTRA_DENY_PATTERNS:-}
+    tmpfs:
+      - /run:size=1m,mode=1777
+    ports:
+      # Loopback by default: only processes on the Docker host (DSM) can connect.
+      - "${BIND_ADDRESS:-127.0.0.1}:${PROXY_PORT:-8888}:8888/tcp"
+    networks: [edge, socks]
+    mem_limit: 64m
+    pids_limit: 64
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "http_proxy=http://127.0.0.1:8888 wget -q -T 5 -O /dev/null http://tinyproxy.stats/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  # Carries only the published proxy port. Its fixed subnet lets PROXY_ALLOW
+  # name the Docker gateway that relays loopback clients.
+  edge:
+    driver: bridge
+    ipam:
+      config: [{subnet: "${EDGE_SUBNET:-172.30.88.0/29}"}]
+  # tinyproxy <-> byedpi only; no route to anywhere else.
+  socks:
+    driver: bridge
+    internal: true
+  # byedpi's way out to the internet.
+  egress:
+    driver: bridge

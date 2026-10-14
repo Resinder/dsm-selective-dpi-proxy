@@ -1,0 +1,14 @@
+# Local configuration (may contain machine-specific values)
+.env
+*.env
+!.env.example
+stack.env
+
+# Validation output
+validation-*.log
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
