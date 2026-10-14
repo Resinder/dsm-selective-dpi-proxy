@@ -183,6 +183,32 @@ Without starting any download:
 
 ---
 
+## Optional: LAN mode (let other devices on the home network use the proxy)
+
+By default the proxy is reachable only from the NAS itself. To let other devices on the same LAN
+use it:
+
+1. In the Portainer stack variables set:
+   * `BIND_ADDRESS` = the NAS's **LAN** IPv4 address (a static/DHCP-reserved address), e.g. `192.168.1.10`
+   * `PROXY_ALLOW` = `172.30.88.0/29,<your LAN subnet>` (e.g. `172.30.88.0/29,192.168.1.0/24`)
+
+   Then **Update the stack**.
+2. Point DSM's system proxy at the same LAN address (the loopback binding is replaced).
+3. On each device that should use it, set an HTTP proxy of `<NAS LAN IP>:8888`
+   (Windows: Settings → Network → Proxy; macOS: Network → Details → Proxies; Android/iOS: Wi-Fi
+   network → Proxy → Manual).
+
+Notes:
+* Never use `0.0.0.0`: that would also publish the proxy on VPN/Tailscale and every other interface.
+* Binding to the LAN address does not expose it to the internet unless your router forwards the
+  port. Do not add a port forward for it.
+* Tailscale: the proxy is not reachable from the tailnet unless the NAS advertises the LAN subnet
+  route. If it does, add a deny or keep `PROXY_ALLOW` limited to the LAN subnet.
+* Devices behind the proxy still validate TLS certificates themselves; only connections to
+  `SPLIT_HOSTS` are altered.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Check |
