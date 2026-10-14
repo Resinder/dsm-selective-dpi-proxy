@@ -134,7 +134,10 @@ Run the stages in order and keep the output. Stages 1–3 change nothing on the 
 sh scripts/validate.sh            # or: PROXY_URL=http://127.0.0.1:8888 sh scripts/validate.sh
 ```
 Expected:
-* **Baseline (direct)**: listed hosts show `CONN-FAIL` (the ISP block); others `OK`.
+* **Baseline (direct)** is run over IPv4 and IPv6 separately. A host that fails over **IPv4** is a
+  candidate for `SPLIT_HOSTS` (SNI filtering). A host that fails **only over IPv6** has an IPv6
+  routing problem instead; do not list it. The proxy path is IPv4-only, so it works through the
+  proxy anyway.
 * **Through the proxy**: listed hosts `OK` with `verify=0` (valid certificate); unlisted hosts `OK`
   exactly as in the baseline.
 * **Refusals**: every line in section 4 is `DENIED`.
@@ -187,6 +190,7 @@ Without starting any download:
 | `403 Access denied` / `Unauthorized connection from "<addr>"` in logs | Client address not in `PROXY_ALLOW`; add the logged address. |
 | `CONNECT tunnel failed, response 403`, log `Refused CONNECT method on port N` | Port not in `CONNECT_PORTS`. |
 | `Proxying refused on filtered url` | Destination matches `filter.default` or `EXTRA_DENY_PATTERNS`. |
+| Many hosts fail directly but work through the proxy without being listed | Check the `direct6` lines: if IPv6 fails for every host, the NAS has an IPv6 default route without working IPv6 connectivity. Fix IPv6 on the router/DSM, or rely on the IPv4-only proxy path. |
 | Listed host still `CONN-FAIL` through the proxy | Try another `TLSREC_POS` (e.g. `3+s`), redeploy, re-test. The ISP may use a different technique for that host. |
 | A listed host returns a self-signed certificate (`TLS-FAIL`) | Its server cannot handle a split ClientHello. Remove it from `SPLIT_HOSTS`. |
 | `NanoCPUs can not be set ... CPU CFS scheduler` or a `PidsLimit` error | The kernel lacks CFS quota / the pids cgroup (Synology DSM 7, kernel 4.4). The stack therefore uses only `mem_limit` and `cpu_shares`; do not add `cpus:` or `pids_limit:`. |

@@ -13,36 +13,41 @@
 #             site blocks non-browser clients
 #   DENIED    the proxy refused the request (403 from tinyproxy)
 #   HTTP-4xx  the site itself answered 4xx
-#   CONN-FAIL no HTTP response (blocked, reset or timed out)
-#   TLS-FAIL  certificate verification failed
+#   CONN-FAIL no HTTP response (blocked, reset, refused or timed out)
+#   TLS-FAIL  certificate verification failed (curl exit 60/51)
+# The direct baseline is split into IPv4 and IPv6: a site that fails only over
+# IPv6 is an IPv6 routing problem, not SNI filtering, and must not be added to
+# SPLIT_HOSTS. The proxy path is IPv4-only (Docker bridge networks).
 set -u
 
 PROXY_URL="${1:-${PROXY_URL:-http://127.0.0.1:8888}}"
 SITES="${SITES:-https://rarbg.to/ https://nyaa.si/ https://thepiratebay.org/}"
 HDR=$(mktemp)
-trap 'rm -f "$HDR"' EXIT
+ERR=$(mktemp)
+trap 'rm -f "$HDR" "$ERR"' EXIT
 
 probe() { # $1 = label, $2 = url, $3.. = extra curl args
   label=$1; url=$2; shift 2
   : > "$HDR"
   out=$(curl -sS -o /dev/null -D "$HDR" -m 15 "$@" \
-        -w '%{http_code} %{ssl_verify_result}' "$url" 2>&1 | tail -1)
-  code=${out%% *}; verify=${out##* }
-  case "$out" in *"CONNECT tunnel failed, response 403"*) code=403; verify=-;; esac
-  class=CONN-FAIL
+        -w '%{http_code} %{ssl_verify_result} %{http_connect}' "$url" 2>"$ERR")
+  rc=$?
+  set -- $out; code=${1:-000}; verify=${2:--}; connect=${3:-000}
   if grep -qi '^cf-mitigated: challenge' "$HDR" 2>/dev/null; then class=CF
+  elif [ "$connect" = 403 ]; then class=DENIED; code=403        # proxy refused the CONNECT
   elif [ "$code" = 403 ] && grep -qi '^Server: tinyproxy' "$HDR" 2>/dev/null; then class=DENIED
-  elif [ "$code" = 403 ] && [ "$verify" = - ]; then class=DENIED
-  elif [ "$verify" != 0 ] && [ "$verify" != - ] && [ "$code" = 000 ] && echo "$url" | grep -q '^https'; then class=TLS-FAIL
+  elif [ "$rc" = 60 ] || [ "$rc" = 51 ]; then class=TLS-FAIL      # certificate problem
+  elif [ "$rc" != 0 ] || [ "$code" = 000 ]; then class=CONN-FAIL   # reset, timeout, refused
   elif echo "$code" | grep -qE '^[23][0-9][0-9]$'; then class=OK
-  elif echo "$code" | grep -qE '^4[0-9][0-9]$'; then class=HTTP-$code
+  else class=HTTP-$code
   fi
-  printf '%-7s %-10s code=%-3s verify=%-2s %s\n' "$label" "$class" "$code" "$verify" "$url"
+  printf '%-7s %-10s code=%-3s verify=%-2s rc=%-2s %s\n' "$label" "$class" "$code" "$verify" "$rc" "$url"
 }
 
 echo "proxy: $PROXY_URL"
-echo "== 1. direct (no proxy) baseline"
-for u in $SITES; do probe direct "$u" --noproxy '*'; done
+echo "== 1. direct (no proxy) baseline, IPv4 and IPv6 separately"
+for u in $SITES; do probe direct4 "$u" --noproxy '*' -4; done
+for u in $SITES; do probe direct6 "$u" --noproxy '*' -6; done
 
 echo "== 2. through the proxy (certificate validation ON)"
 for u in $SITES; do probe proxy "$u" -x "$PROXY_URL"; done
