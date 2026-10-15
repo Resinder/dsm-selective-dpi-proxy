@@ -1,0 +1,10 @@
+# Everything in this repo is consumed inside Linux containers, so normalise all
+# text to LF in the repo regardless of the OS it is edited on. A CRLF would
+# break a shell entrypoint ("/bin/sh^M: not found") or append a stray CR to a
+# hostname in hosts.default (so the SNI match silently fails).
+* text=auto eol=lf
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.default   text eol=lf
+.env.example text eol=lf
+Dockerfile  text eol=lf
