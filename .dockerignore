@@ -1,0 +1,9 @@
+# byedpi and pac build from the repo root (to share hosts.default); keep the
+# build context minimal.
+.git
+.gitignore
+.env
+.env.example
+README.md
+docker-compose.yml
+scripts

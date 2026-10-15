@@ -12,7 +12,13 @@ PAC="$WEB_DIR/proxy.pac"
 HTTPD_CONF="$WEB_DIR/httpd.conf"
 
 : "${PAC_PROXY:?PAC_PROXY must be the HOST:PORT clients should use, e.g. 192.168.1.10:8888}"
-: "${PAC_HOSTS:?PAC_HOSTS must list the hostnames to send through the proxy (space-separated)}"
+# Default the routed host list to the baked hosts.default (the same file ByeDPI
+# splits), so the PAC and the splitting stay in sync; PAC_HOSTS env overrides it.
+HOSTS_FILE=/etc/pac/hosts.default
+if [ -z "${PAC_HOSTS:-}" ] && [ -r "$HOSTS_FILE" ]; then
+  PAC_HOSTS="$(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$HOSTS_FILE" | tr '\n' ' ')"
+fi
+: "${PAC_HOSTS:?PAC_HOSTS is empty and $HOSTS_FILE lists no hosts}"
 PAC_PORT="${PAC_PORT:-8080}"
 
 # PAC_PROXY is host:port with a literal IPv4/hostname and a numeric port.

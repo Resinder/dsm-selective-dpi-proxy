@@ -11,9 +11,11 @@ DSM client ──HTTP proxy──▶ tinyproxy ──SOCKS5──▶ ByeDPI ─�
 
 * **Tinyproxy** is the HTTP/HTTPS (CONNECT) proxy that DSM talks to. It enforces client and
   destination restrictions and forwards every request to ByeDPI.
-* **ByeDPI** (`ciadpi`) is a SOCKS5 proxy that, **only for the hostnames in `SPLIT_HOSTS`**, splits the
+* **ByeDPI** (`ciadpi`) is a SOCKS5 proxy that, **only for the hostnames in `hosts.default`**, splits the
   TLS ClientHello into two TLS records inside the SNI field (`--tlsrec`), so SNI-based filters cannot
   read the hostname. Every other connection is relayed byte-for-byte.
+* **PAC server** serves a `proxy.pac` so a device set to "automatic proxy configuration" sends only
+  those same hosts through the proxy and goes DIRECT for everything else (see the PAC section below).
 * Traffic never leaves through another network or VPN: it still uses the NAS's own internet line.
   End-to-end TLS is untouched: the proxy cannot see or alter encrypted content, and certificate
   validation happens in the client as usual.
@@ -28,7 +30,9 @@ DSM client ──HTTP proxy──▶ tinyproxy ──SOCKS5──▶ ByeDPI ─�
 ```
 .
 ├── docker-compose.yml        # the stack (Portainer reads this)
+├── hosts.default             # hostnames ByeDPI splits + the PAC routes (edit this)
 ├── .env.example              # every setting, documented
+├── .dockerignore             # trims the root build context
 ├── .gitignore
 ├── byedpi/
 │   ├── Dockerfile            # builds ciadpi from a pinned upstream commit
@@ -37,9 +41,22 @@ DSM client ──HTTP proxy──▶ tinyproxy ──SOCKS5──▶ ByeDPI ─�
 │   ├── Dockerfile            # tinyproxy from Alpine's signed packages
 │   ├── entrypoint.sh         # renders tinyproxy.conf from env vars, fails closed
 │   └── filter.default        # destination deny rules
+├── pac/
+│   ├── Dockerfile            # busybox-extras httpd on the pinned Alpine base
+│   └── entrypoint.sh         # renders proxy.pac from hosts.default / env
 └── scripts/
     └── validate.sh           # read-only test script to run on the NAS
 ```
+
+> **Changing which sites are unblocked:** edit `hosts.default` (one hostname per line) and redeploy.
+> ByeDPI splits exactly those hosts and the PAC routes exactly those hosts; everything else is DIRECT
+> and unmodified. The list is in git, so it survives redeploys — there is no `SPLIT_HOSTS` env var to
+> set anymore (a stale one in an existing Portainer stack is ignored).
+>
+> **DNS:** this stack does not change DNS. ByeDPI resolves through the NAS's resolver, which is enough
+> when the block is SNI/DPI-based (the common case — e.g. Discord in TR resolves to the real IPs and is
+> defeated by the split alone). If a site is blocked by **DNS poisoning** instead, point the NAS (or
+> your router) at a DoH/DoT resolver; a split-only proxy cannot fix a poisoned lookup.
 
 ---
 
@@ -50,7 +67,7 @@ DSM client ──HTTP proxy──▶ tinyproxy ──SOCKS5──▶ ByeDPI ─�
 | Who can use the proxy | Port published on `127.0.0.1` only (default `BIND_ADDRESS`), so only processes on the NAS itself can connect; nothing on the LAN, the tailnet or the internet can. Tinyproxy additionally allows only `PROXY_ALLOW` (default: the `edge` network subnet, from which Docker relays loopback clients). Any other source gets `403 Access denied`. |
 | SOCKS exposure | ByeDPI has **no published port**. Its SOCKS port is reachable only on the `socks` network, which is `internal: true` and shared with tinyproxy alone. |
 | Destination restrictions | HTTPS `CONNECT` only to ports in `CONNECT_PORTS` (default `443`). Plain HTTP only to the default port 80. Literal loopback / RFC 1918 / link-local / CGNAT-Tailscale / IPv6 ULA and link-local targets and `.local`, `.internal`, `.lan`, `.home`, `.arpa`, `.ts.net` names are refused (`tinyproxy/filter.default`). |
-| Which traffic is altered | Only TLS ClientHellos whose SNI matches `SPLIT_HOSTS` (label-boundary suffix match). ByeDPI is started with `--hosts=:<list> --proto=tls --tlsrec=<pos> --auto=none`: the options apply to the listed hosts only, and the trailing empty group relays everything else unmodified. |
+| Which traffic is altered | Only TLS ClientHellos whose SNI matches a host in `hosts.default` (label-boundary suffix match). ByeDPI is started with `--hosts=/etc/byedpi/hosts.default --proto=tls --tlsrec=<pos> --auto=none`: the options apply to the listed hosts only, and the trailing empty group relays everything else unmodified. |
 | TLS integrity | The proxy never terminates TLS. Clients validate certificates end to end; nothing in this stack disables verification. |
 | Container hardening | Read-only root filesystems, `cap_drop: [ALL]`, `no-new-privileges`, non-root user `65534`, no privileged mode, memory limits and a relative CPU weight, `restart: unless-stopped`, rotated `json-file` logs. |
 | Supply chain | Both images build `FROM alpine:3.20@sha256:d9e853e8…` (digest-pinned). Tinyproxy comes from Alpine's signed package repo. ByeDPI is compiled from source at upstream commit `7efde1b1…` (tag `v0.17.3`); the build aborts if the checked-out tree does not hash to that commit. `pull_policy: build` prevents Docker from pulling look-alike images from a registry. |
@@ -94,8 +111,9 @@ available for this project.
 1. Portainer → **Stacks** → **Add stack** → **Repository**.
 2. **Repository URL**: this repository's HTTPS URL. **Reference**: `refs/heads/main` (or a tag).
    **Compose path**: `docker-compose.yml`.
-3. **Environment variables**: add at least `SPLIT_HOSTS` (e.g. `rarbg.to`). Review the defaults in
-   `.env.example`; change `EDGE_SUBNET` **and** `PROXY_ALLOW` together if `172.30.88.0/29` collides.
+3. **Environment variables**: none are required to start — the hosts to unblock live in `hosts.default`.
+   Review the defaults in `.env.example`; change `EDGE_SUBNET` **and** `PROXY_ALLOW` together if
+   `172.30.88.0/29` collides, and set `BIND_ADDRESS`/`PROXY_ALLOW` for LAN mode (below).
 4. Deploy. The first deploy builds both images (about 1–3 minutes on a DS720+).
 5. Check that both containers are **healthy** (Portainer → Containers).
 
@@ -106,8 +124,11 @@ All configuration is passed as environment variables and rendered inside the con
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SPLIT_HOSTS` | *(required)* | Space-separated hostnames to split. |
+| *(hosts to split)* | `hosts.default` | Hostnames to split live in the git file `hosts.default`, not an env var. |
 | `TLSREC_POS` | `1+s` | `--tlsrec` position: offset `1` relative to the SNI (`+s`). |
+| `PAC_HOSTS` | *(hosts.default)* | Override the PAC's routed host list; defaults to `hosts.default`. |
+| `PAC_PROXY` | `BIND_ADDRESS:PROXY_PORT` | `HOST:PORT` the PAC hands out. |
+| `PAC_PORT` | `8080` | Host port the PAC file is served on. |
 | `BIND_ADDRESS` | `127.0.0.1` | Host address the proxy port is published on. Keep loopback. |
 | `PROXY_PORT` | `8888` | Host port of the proxy. |
 | `EDGE_SUBNET` | `172.30.88.0/29` | Subnet of the `edge` network. |
@@ -218,7 +239,7 @@ recommended way to cover a whole LAN selectively.
 1. The `pac` service is included in the stack and serves `http://<BIND_ADDRESS>:<PAC_PORT>/proxy.pac`
    (`PAC_PORT` default `8080`). Like the proxy port it binds to `BIND_ADDRESS`, so it is loopback-only
    until you switch to LAN mode (set `BIND_ADDRESS` to the NAS LAN IP, as above).
-2. `PAC_HOSTS` defaults to `SPLIT_HOSTS`, so the auto-config routes exactly the hosts ByeDPI splits.
+2. `PAC_HOSTS` defaults to `hosts.default`, so the auto-config routes exactly the hosts ByeDPI splits.
    `PAC_PROXY` defaults to `BIND_ADDRESS:PROXY_PORT`; override either if the proxy clients should
    reach it at a different address.
 3. On each device (or router/DHCP option 252 for the whole LAN) set **Automatic proxy configuration /

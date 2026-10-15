@@ -8,8 +8,12 @@ FROM ${ALPINE_IMAGE}
 # provides it (from Alpine's signed package repo).
 RUN apk add --no-cache busybox-extras \
  && busybox-extras httpd 2>&1 | head -1 || true
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod 0555 /usr/local/bin/entrypoint.sh
+# Build context is the repo root (shared with the byedpi service) so both read
+# the same hosts.default. Paths below are relative to that root.
+COPY pac/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY hosts.default /etc/pac/hosts.default
+RUN chmod 0555 /usr/local/bin/entrypoint.sh \
+ && chmod 0444 /etc/pac/hosts.default
 USER 65534:65534
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -28,8 +28,12 @@ LABEL org.opencontainers.image.title="byedpi" \
       org.opencontainers.image.revision="${BYEDPI_COMMIT}" \
       org.opencontainers.image.licenses="MIT"
 COPY --from=build /src/ciadpi /usr/local/bin/ciadpi
-COPY healthcheck.sh /usr/local/bin/healthcheck.sh
-RUN chmod 0555 /usr/local/bin/ciadpi /usr/local/bin/healthcheck.sh
+# Build context is the repo root (shared with the pac service) so both read the
+# same hosts.default. The paths below are relative to that root.
+COPY byedpi/healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY hosts.default /etc/byedpi/hosts.default
+RUN chmod 0555 /usr/local/bin/ciadpi /usr/local/bin/healthcheck.sh \
+ && chmod 0444 /etc/byedpi/hosts.default
 USER 65534:65534
 EXPOSE 1080
 ENTRYPOINT ["/usr/local/bin/ciadpi"]

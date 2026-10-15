@@ -1,0 +1,15 @@
+# Hostnames whose TLS ClientHello ByeDPI splits (one per line). Matching is on
+# label boundaries against the SNI / Host header: "discord.com" also covers
+# "cdn.discord.com" but not "notdiscord.com". Every other connection is relayed
+# byte-for-byte. The PAC server routes exactly these hosts through the proxy.
+#
+# Keep the list minimal and add a host only after confirming it is blocked:
+# splitting can break servers that cannot reassemble a split ClientHello.
+# Lines starting with "#" and blank lines are ignored. Edit and redeploy.
+
+# Discord (TR SNI-based block; confirmed bypassed with --tlsrec=1+s)
+discord.com
+discord.gg
+discordapp.com
+discordapp.net
+discord.media
