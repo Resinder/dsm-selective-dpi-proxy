@@ -2,7 +2,7 @@
 # Render a proxy auto-config (PAC) file from environment variables into a tmpfs
 # and serve it read-only over HTTP with busybox httpd. Fails closed on invalid
 # input. The PAC hands out the proxy ONLY for PAC_HOSTS (label-boundary suffix
-# match, same rule as ByeDPI's SPLIT_HOSTS); every other host stays DIRECT, so a
+# match, same rule as the hosts in hosts.default); every other host stays DIRECT, so a
 # device set to "automatic proxy configuration" uses the NAS line for everything
 # except the blocked sites.
 set -eu

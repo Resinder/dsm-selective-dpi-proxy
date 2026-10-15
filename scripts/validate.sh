@@ -17,11 +17,11 @@
 #   TLS-FAIL  certificate verification failed (curl exit 60/51)
 # The direct baseline is split into IPv4 and IPv6: a site that fails only over
 # IPv6 is an IPv6 routing problem, not SNI filtering, and must not be added to
-# SPLIT_HOSTS. The proxy path is IPv4-only (Docker bridge networks).
+# hosts.default. The proxy path is IPv4-only (Docker bridge networks).
 set -u
 
 PROXY_URL="${1:-${PROXY_URL:-http://127.0.0.1:8888}}"
-SITES="${SITES:-https://rarbg.to/ https://nyaa.si/ https://thepiratebay.org/}"
+SITES="${SITES:-https://discord.com/ https://gateway.discord.gg/ https://cdn.discordapp.com/}"
 HDR=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$HDR" "$ERR"' EXIT

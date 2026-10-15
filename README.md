@@ -88,7 +88,7 @@ available for this project.
   stop, which this stack intentionally does not touch. Because the proxy is reachable only from the
   NAS itself, this gives no process access it does not already have.
 * **DSM-wide scope.** DSM's system proxy is used by several DSM services (e.g. Package Center,
-  updates), not just Download Station. Those requests pass through unmodified (only `SPLIT_HOSTS` are
+  updates), not just Download Station. Those requests pass through unmodified (only `hosts.default` are
   altered) and leave over the same line, but they now depend on this stack being up. Keep
   "Bypass proxy server for local addresses" enabled.
 * **Splitting can break some servers.** Servers or middleboxes that cannot reassemble a split
@@ -156,7 +156,7 @@ sh scripts/validate.sh            # or: PROXY_URL=http://127.0.0.1:8888 sh scrip
 ```
 Expected:
 * **Baseline (direct)** is run over IPv4 and IPv6 separately. A host that fails over **IPv4** is a
-  candidate for `SPLIT_HOSTS` (SNI filtering). A host that fails **only over IPv6** has an IPv6
+  candidate for `hosts.default` (SNI filtering). A host that fails **only over IPv6** has an IPv6
   routing problem instead; do not list it. The proxy path is IPv4-only, so it works through the
   proxy anyway.
 * **Through the proxy**: listed hosts `OK` with `verify=0` (valid certificate); unlisted hosts `OK`
@@ -200,7 +200,7 @@ Without starting any download:
 * If you later decide to test with a download, check `sudo ss -tnp` for Download Station's peer
   connections (to many remote IPs on high ports, not to `127.0.0.1:8888`) and that tinyproxy logs no
   peer addresses. HTTP(S) **tracker announces** may go through the proxy when the system proxy is on;
-  they are relayed unmodified unless a tracker host is in `SPLIT_HOSTS`.
+  they are relayed unmodified unless a tracker host is in `hosts.default`.
 
 ---
 
@@ -226,7 +226,7 @@ Notes:
 * Tailscale: the proxy is not reachable from the tailnet unless the NAS advertises the LAN subnet
   route. If it does, add a deny or keep `PROXY_ALLOW` limited to the LAN subnet.
 * Devices behind the proxy still validate TLS certificates themselves; only connections to
-  `SPLIT_HOSTS` are altered.
+  `hosts.default` are altered.
 
 ---
 
@@ -312,7 +312,7 @@ TCP-only (see the note above).
 | `Proxying refused on filtered url` | Destination matches `filter.default` or `EXTRA_DENY_PATTERNS`. |
 | Many hosts fail directly but work through the proxy without being listed | Check the `direct6` lines: if IPv6 fails for every host, the NAS has an IPv6 default route without working IPv6 connectivity. Fix IPv6 on the router/DSM, or rely on the IPv4-only proxy path. |
 | Listed host still `CONN-FAIL` through the proxy | Try another `TLSREC_POS` (e.g. `3+s`), redeploy, re-test. The ISP may use a different technique for that host. |
-| A listed host returns a self-signed certificate (`TLS-FAIL`) | Its server cannot handle a split ClientHello. Remove it from `SPLIT_HOSTS`. |
+| A listed host returns a self-signed certificate (`TLS-FAIL`) | Its server cannot handle a split ClientHello. Remove it from `hosts.default`. |
 | `NanoCPUs can not be set ... CPU CFS scheduler` or a `PidsLimit` error | The kernel lacks CFS quota / the pids cgroup (Synology DSM 7, kernel 4.4). The stack therefore uses only `mem_limit` and `cpu_shares`; do not add `cpus:` or `pids_limit:`. |
 | tinyproxy restarts with `can't create directory '/run/tinyproxy'` or `not writable` | The tmpfs must be owned by uid 65534. Keep the `uid=65534,gid=65534` tmpfs options; Synology's Docker ignores `mode=`. |
 | Stack fails to deploy: subnet overlap | Change `EDGE_SUBNET` and `PROXY_ALLOW` together. |

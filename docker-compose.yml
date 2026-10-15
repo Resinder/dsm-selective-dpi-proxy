@@ -4,7 +4,7 @@
 #   -> byedpi (SOCKS5, internal network only) -> internet
 #
 # ByeDPI splits the TLS ClientHello record only for the hostnames in
-# SPLIT_HOSTS; every other connection passes through it unmodified.
+# the hosts in hosts.default; every other connection passes through it unmodified.
 # All settings come from environment variables (Portainer stack variables or
 # a local .env file); see .env.example and README.md.
 
