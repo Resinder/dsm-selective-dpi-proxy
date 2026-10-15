@@ -253,7 +253,53 @@ traffic itself.
 
 > The PAC and the proxy only carry **TCP/TLS** (HTTP `CONNECT`). Protocols a browser proxy never sees
 > — notably Discord **voice** (UDP/WebRTC) — are unaffected; use a VPN for those. Text, login and web
-> for `SPLIT_HOSTS` work over the proxy.
+> for the listed hosts work over the proxy.
+
+---
+
+## Client setup (Windows / macOS / Linux / Android / iOS)
+
+Requires **LAN mode** (above): `BIND_ADDRESS` = the NAS LAN IP. Replace `NAS_IP` below with it
+(e.g. `192.168.68.20`). Two ways on every OS — pick one:
+
+* **PAC URL** (recommended, selective): `http://NAS_IP:8080/proxy.pac` — only the listed hosts use the
+  proxy, everything else is DIRECT.
+* **Manual HTTP proxy** (everything TCP goes through it): host `NAS_IP`, port `8888`.
+
+| OS | PAC URL | Manual proxy |
+|---|---|---|
+| **Windows 10/11** | Settings → Network & Internet → Proxy → **Use setup script** → On → paste the PAC URL → Save | Settings → Proxy → **Manual proxy setup** → On → `NAS_IP` : `8888` → Save |
+| **macOS** | System Settings → Network → (your network) → Details → **Proxies** → **Automatic Proxy Configuration** → paste PAC URL → OK | Same panel → tick **Web Proxy (HTTP)** and **Secure Web Proxy (HTTPS)** → `NAS_IP` : `8888` |
+| **Linux (GNOME)** | Settings → Network → **Network Proxy** → **Automatic** → Configuration URL = PAC URL | …→ **Manual** → HTTP + HTTPS proxy `NAS_IP` : `8888`. Terminal-only: `export https_proxy=http://NAS_IP:8888 http_proxy=http://NAS_IP:8888` (not selective) |
+| **Android** | Wi-Fi → long-press your network → **Modify** → Advanced → Proxy → **Proxy Auto-Config** → PAC URL *(not on every ROM)* | …→ Proxy → **Manual** → Hostname `NAS_IP`, Port `8888` |
+| **iOS / iPadOS** | Settings → Wi-Fi → ⓘ your network → **Configure Proxy** → **Automatic** → URL = PAC URL | …→ **Manual** → Server `NAS_IP`, Port `8888` |
+
+Notes:
+* Chrome/Edge/Safari follow the OS proxy. **Firefox** has its own: Settings → Network Settings →
+  *Automatic proxy configuration URL* (PAC) or *Manual*.
+* The proxy must be reachable, so the device has to be on the LAN (or the tailnet, if the NAS routes
+  it). It is **not** exposed to the internet — do not port-forward `8888`/`8080`.
+* **Whole-LAN, zero per-device setup (advanced):** set your router's DHCP **option 252** (WPAD) to the
+  PAC URL; devices then auto-discover it. Router support varies.
+
+## How to test it works
+
+1. **PAC is served** — open `http://NAS_IP:8080/proxy.pac` in a browser; you should see JavaScript
+   listing the hosts and `PROXY NAS_IP:8888`.
+2. **A blocked site loads** — after applying the proxy/PAC, open **https://discord.com** (and sign in).
+   Without the proxy it times out; with it, it loads.
+3. **One-line check from any OS terminal** (expects `200`):
+   ```
+   curl -x http://NAS_IP:8888 -o /dev/null -s -w "%{http_code}\n" https://discord.com/
+   ```
+   `gateway.discord.gg` returning `404` and `cdn.discordapp.com` returning `403` through the proxy is
+   also success — it means the TLS connection went through; those endpoints just reject a bare `GET`.
+4. **Selective is intact** — a non-listed site (e.g. a normal news site) still loads at full speed and,
+   with the PAC, goes DIRECT (not through the proxy). Your public IP is unchanged: traffic uses your
+   own line, this is not a VPN.
+
+If Discord **messages/web work but voice does not**, that is expected — voice is UDP and this stack is
+TCP-only (see the note above).
 
 ---
 
