@@ -88,9 +88,10 @@ available for this project.
   stop, which this stack intentionally does not touch. Because the proxy is reachable only from the
   NAS itself, this gives no process access it does not already have.
 * **DSM-wide scope.** DSM's system proxy is used by several DSM services (e.g. Package Center,
-  updates), not just Download Station. Those requests pass through unmodified (only `hosts.default` are
-  altered) and leave over the same line, but they now depend on this stack being up. Keep
-  "Bypass proxy server for local addresses" enabled.
+  updates), not just one app. Those requests pass through unmodified (only the hosts in `hosts.default`
+  are altered) and leave over the same line, but they now depend on this stack being up. Keep
+  "Bypass proxy server for local addresses" enabled. (On a client device you point at the proxy, the
+  same holds — only the listed hosts are split; prefer the PAC so the rest stays DIRECT.)
 * **Splitting can break some servers.** Servers or middleboxes that cannot reassemble a split
   ClientHello will fail for listed hosts. In testing, `nyaa.si` returned a self-signed certificate
   when split, so it must **not** be listed. Only add hosts you have confirmed are blocked.
@@ -182,25 +183,17 @@ DSM → **Control Panel → Network → General → Advanced settings / Proxy** 
 **Connect via a proxy server**: address `127.0.0.1`, port `8888` (or your `PROXY_PORT`),
 tick **Bypass proxy server for local addresses**. No authentication.
 
-### Stage 5 — does Download Station's search actually use the system proxy?
-Do not assume it does. With `docker logs -f <stack>-tinyproxy-1` running:
-1. In Download Station → BT Search, run a search (searching does not download anything).
-2. **Uses the proxy** if tinyproxy logs `CONNECT <search-site>:443` lines from an allowed client at the
-   time of the search, and modules for listed hosts now return results.
-3. **Does not use the proxy** if no such lines appear while the search runs. Confirm on the NAS with
-   `sudo ss -tnp | grep ':443'` during a search: direct connections from Download Station processes
-   to the search sites mean the system proxy is bypassed. In that case, stop and revert Stage 4; a
-   different design is needed (for example, a per-application proxy setting), and this stack alone
-   does not solve the problem.
+### Stage 5 — confirm from a client device
+After pointing a device at the proxy (see [Client setup](#client-setup-windows--macos--linux--android--ios)),
+open a blocked listed site — e.g. **https://discord.com** — and it should load. From any terminal:
 
-### Stage 6 — torrent data stays off the proxy
-Without starting any download:
-* Tinyproxy's log must show only HTTP(S) requests (search pages, possibly HTTP tracker announces);
-  BitTorrent peer connections are not HTTP and cannot use an HTTP proxy.
-* If you later decide to test with a download, check `sudo ss -tnp` for Download Station's peer
-  connections (to many remote IPs on high ports, not to `127.0.0.1:8888`) and that tinyproxy logs no
-  peer addresses. HTTP(S) **tracker announces** may go through the proxy when the system proxy is on;
-  they are relayed unmodified unless a tracker host is in `hosts.default`.
+```
+curl -x http://<NAS_IP>:8888 -o /dev/null -s -w "%{http_code}\n" https://discord.com/   # expect 200
+```
+
+A non-listed site should still load normally and, with the PAC, go DIRECT (not through the proxy). Only
+HTTP/HTTPS (TCP) is carried; UDP — e.g. Discord **voice**, QUIC/HTTP-3 — is not, and an app that only
+speaks UDP is unaffected by this stack.
 
 ---
 
@@ -347,7 +340,6 @@ Nothing else on the NAS is modified by this stack (no host files, firewall rules
 
 ## Limitations that can only be verified on the NAS
 
-* Whether Download Station's BT search modules honour the DSM system proxy (Stage 5).
 * The exact client address Synology's Docker uses for loopback-published ports (Stage 2 log check).
 * Whether Portainer on the NAS builds images from a Git stack in your Portainer version.
 * Whether the ISP's filtering of a given host is defeated by `--tlsrec` from the NAS's line.
