@@ -42,10 +42,14 @@ services:
       - "--port=1080"
       - "--no-udp"
       - "--max-conn=${BYEDPI_MAX_CONN:-256}"
-      - "--hosts=/etc/byedpi/hosts.default"
+      # The entrypoint renders this clean list from hosts.default (comments
+      # stripped); --hosts stays before the --proto/--tlsrec group options.
+      - "--hosts=/run/byedpi/hosts"
       - "--proto=tls"
       - "--tlsrec=${TLSREC_POS:-1+s}"
       - "--auto=none"
+    tmpfs:
+      - /run/byedpi:size=256k,uid=65534,gid=65534
     networks: [socks, egress]   # no "ports": the SOCKS port is never published
     mem_limit: 64m
     # Relative CPU weight only. Synology's 4.4 kernel has no CFS quota and no
