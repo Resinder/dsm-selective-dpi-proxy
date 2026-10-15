@@ -4,6 +4,10 @@
 
 ARG ALPINE_IMAGE=alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 FROM ${ALPINE_IMAGE}
+# The base image's busybox is built without the httpd applet; busybox-extras
+# provides it (from Alpine's signed package repo).
+RUN apk add --no-cache busybox-extras \
+ && busybox-extras httpd 2>&1 | head -1 || true
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 0555 /usr/local/bin/entrypoint.sh
 USER 65534:65534

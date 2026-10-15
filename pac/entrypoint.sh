@@ -62,4 +62,5 @@ cat > "$HTTPD_CONF" <<'EOF'
 EOF
 
 echo "pac: serving /proxy.pac on :$PAC_PORT -> PROXY $PAC_PROXY for [$PAC_HOSTS]"
-exec httpd -f -v -p "0.0.0.0:$PAC_PORT" -h "$WEB_DIR" -c "$HTTPD_CONF"
+# busybox's httpd applet ships in busybox-extras, invoked through that binary.
+exec busybox-extras httpd -f -v -p "0.0.0.0:$PAC_PORT" -h "$WEB_DIR" -c "$HTTPD_CONF"
