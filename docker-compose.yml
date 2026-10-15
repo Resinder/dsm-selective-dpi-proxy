@@ -88,8 +88,37 @@ services:
       retries: 3
       start_period: 5s
 
+  # Serves a proxy.pac so devices set to "automatic proxy configuration" use the
+  # proxy ONLY for PAC_HOSTS (defaults to SPLIT_HOSTS) and go DIRECT for
+  # everything else. Bound to BIND_ADDRESS like the proxy port, so it is
+  # loopback-only until you switch to LAN mode.
+  pac:
+    <<: *hardening
+    build:
+      context: ./pac
+    image: dsm-selective-dpi-proxy/pac:1-alpine3.20
+    pull_policy: build
+    environment:
+      PAC_PROXY: ${PAC_PROXY:-${BIND_ADDRESS:-127.0.0.1}:${PROXY_PORT:-8888}}
+      PAC_HOSTS: ${PAC_HOSTS:-${SPLIT_HOSTS:?set SPLIT_HOSTS, or PAC_HOSTS, to the hostnames to send through the proxy}}
+      PAC_PORT: ${PAC_PORT:-8080}
+    tmpfs:
+      - /run/pac:size=1m,uid=65534,gid=65534
+    ports:
+      # Loopback by default: switch BIND_ADDRESS to the NAS LAN IP for LAN mode.
+      - "${BIND_ADDRESS:-127.0.0.1}:${PAC_PORT:-8080}:8080/tcp"
+    networks: [edge]
+    mem_limit: 32m
+    cpu_shares: 256
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 5 -O /dev/null http://127.0.0.1:8080/proxy.pac || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
 networks:
-  # Carries only the published proxy port. Its fixed subnet lets PROXY_ALLOW
+  # Carries the published proxy and PAC ports. Its fixed subnet lets PROXY_ALLOW
   # name the Docker gateway that relays loopback clients.
   edge:
     driver: bridge

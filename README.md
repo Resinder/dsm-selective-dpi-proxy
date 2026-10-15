@@ -209,6 +209,33 @@ Notes:
 
 ---
 
+## Optional: PAC (automatic proxy configuration) for LAN devices
+
+Instead of toggling a manual proxy on every device, the stack can serve a **PAC file** so each device
+sends **only the blocked hosts** through the proxy and everything else stays DIRECT. This is the
+recommended way to cover a whole LAN selectively.
+
+1. The `pac` service is included in the stack and serves `http://<BIND_ADDRESS>:<PAC_PORT>/proxy.pac`
+   (`PAC_PORT` default `8080`). Like the proxy port it binds to `BIND_ADDRESS`, so it is loopback-only
+   until you switch to LAN mode (set `BIND_ADDRESS` to the NAS LAN IP, as above).
+2. `PAC_HOSTS` defaults to `SPLIT_HOSTS`, so the auto-config routes exactly the hosts ByeDPI splits.
+   `PAC_PROXY` defaults to `BIND_ADDRESS:PROXY_PORT`; override either if the proxy clients should
+   reach it at a different address.
+3. On each device (or router/DHCP option 252 for the whole LAN) set **Automatic proxy configuration /
+   PAC URL** to `http://<NAS LAN IP>:8080/proxy.pac`. Windows: Settings → Network → Proxy → *Use setup
+   script*. macOS: Network → Proxies → *Automatic Proxy Configuration*. Android/iOS: Wi-Fi → Proxy →
+   *Auto*.
+
+The PAC returns `PROXY <PAC_PROXY>` for a host that equals or is a sub-domain of a `PAC_HOSTS` entry,
+and `DIRECT` for everything else. It is a plain static file; it holds no credentials and alters no
+traffic itself.
+
+> The PAC and the proxy only carry **TCP/TLS** (HTTP `CONNECT`). Protocols a browser proxy never sees
+> — notably Discord **voice** (UDP/WebRTC) — are unaffected; use a VPN for those. Text, login and web
+> for `SPLIT_HOSTS` work over the proxy.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Check |
